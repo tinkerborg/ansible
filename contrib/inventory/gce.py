@@ -89,6 +89,7 @@ USER_AGENT_VERSION = "v2"
 import sys
 import os
 import argparse
+import re
 
 from time import time
 
@@ -168,9 +169,12 @@ class GceInventory(object):
         self.parse_cli_args()
         self.config = self.get_config()
         self.driver = self.get_gce_driver()
-        self.ip_type = self.get_inventory_options()
+        self.ip_type = self.get_ip_type()
+        self.instance_label_filter = self.get_instance_label_filter()
         if self.ip_type:
             self.ip_type = self.ip_type.lower()
+        if self.instance_label_filter:
+            self.instance_label_filter = re.compile(self.instance_label_filter)
 
         # Cache management
         start_inventory_time = time()
@@ -223,6 +227,7 @@ class GceInventory(object):
             'gce_zone': '',
             'libcloud_secrets': '',
             'inventory_ip_type': '',
+            'instance_label_filter': '',
             'cache_path': '~/.ansible/tmp',
             'cache_max_age': '300'
         })
@@ -257,7 +262,7 @@ class GceInventory(object):
                                          cache_name=cache_name)
         return config
 
-    def get_inventory_options(self):
+    def get_ip_type(self):
         """Determine inventory options. Environment variables always
         take precedence over configuration files."""
         ip_type = self.config.get('inventory', 'inventory_ip_type')
@@ -265,6 +270,15 @@ class GceInventory(object):
         # other configuration
         ip_type = os.environ.get('INVENTORY_IP_TYPE', ip_type)
         return ip_type
+
+    def get_instance_label_filter(self):
+        """Determine instance label filter options. Environment variables always
+        take precedence over configuration files."""
+        instance_label_filter = self.config.get('inventory', 'instance_label_filter')
+        # If the appropriate environment variables are set, they override
+        # other configuration
+        instance_label_filter = os.environ.get('INSTANCE_LABEL_FILTER', instance_label_filter)
+        return instance_label_filter
 
     def get_gce_driver(self):
         """Determine the GCE authorization settings and return a
@@ -456,6 +470,25 @@ class GceInventory(object):
                     groups[tag].append(name)
                 else:
                     groups[tag] = [name]
+
+            if self.instance_label_filter:
+                labels = node.extra['labels']
+
+                for key in labels:
+                    match = self.instance_label_filter.match(key)
+                    if match:
+                        if self.instance_label_filter.groups > 0:
+                            label = "-".join(match.groups())
+                        else:
+                            label = match.group()
+
+                        value = labels[key]
+                        if value:
+                            label = "%s_%s" % (label, value)
+                        if label in groups:
+                            groups[label].append(name)
+                        else:
+                            groups[label] = [name]
 
             net = node.extra['networkInterfaces'][0]['network'].split('/')[-1]
             net = 'network_%s' % net
