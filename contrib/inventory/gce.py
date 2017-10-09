@@ -473,22 +473,22 @@ class GceInventory(object):
 
             if self.instance_label_filter:
                 labels = node.extra['labels']
+                if labels is not None:
+                    for key in labels:
+                        match = self.instance_label_filter.match(key)
+                        if match:
+                            if self.instance_label_filter.groups > 0:
+                                label = "-".join(match.groups())
+                            else:
+                                label = match.group()
 
-                for key in labels:
-                    match = self.instance_label_filter.match(key)
-                    if match:
-                        if self.instance_label_filter.groups > 0:
-                            label = "-".join(match.groups())
-                        else:
-                            label = match.group()
-
-                        value = labels[key]
-                        if value:
-                            label = "%s_%s" % (label, value)
-                        if label in groups:
-                            groups[label].append(name)
-                        else:
-                            groups[label] = [name]
+                            value = labels[key]
+                            if value:
+                                label = "%s_%s" % (label, value)
+                            if label in groups:
+                                groups[label].append(name)
+                            else:
+                                groups[label] = [name]
 
             net = node.extra['networkInterfaces'][0]['network'].split('/')[-1]
             net = 'network_%s' % net
